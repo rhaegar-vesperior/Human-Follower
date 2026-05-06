@@ -1,152 +1,138 @@
 #include <WiFi.h>
-#include <WiFiUdp.h>
-
-using namespace std; // Using directive as per your preference
+#include <WebSocketsServer.h>
 
 // ================= WIFI =================
-const char* ssid = "YOUR_WIFI_NAME";
-const char* password = "YOUR_WIFI_PASSWORD";
-const int udpPort = 1234;
+const char* ssid = "Pixel 7a"; // add your device(phone/laptop) wifi ID here
+const char* password = "1029384756"; // add your device(phone/laptop) wifi Password here
 
-WiFiUDP udp;
-char packetBuffer[64];
+WebSocketsServer webSocket(81);
 
 // ================= MOTOR PINS =================
-#define IN1 14
-#define IN2 15
-#define IN3 12
-#define IN4 13
-#define ENA 2
-#define ENB 4
+#define IN1 27
+#define IN2 26
+#define IN3 25
+#define IN4 33
+#define ENA 14
+#define ENB 32
 
-// ================= PWM (LEDC) =================
-#define CH_R 0
-#define CH_L 1
-#define PWM_FREQ 5000
-#define PWM_RES 8
+// ================= ULTRASONIC =================
+#define TRIG 19
+#define ECHO 18
 
-struct VisionData {
-    int centerX;
-    long area;
-};
+float distance = 100;
 
-QueueHandle_t commandQueue;
-unsigned long lastPacketTime = 0;
+// ================= SPEED =================
+int leftSpeed = 0;
+int rightSpeed = 0;
 
-// ================= PARAMETERS =================
-const int TIMEOUT = 800;
-const int FRAME_CENTER = 320;
-const int DEAD_BAND = 25;
-const int TARGET_AREA = 45000;
-const int AREA_DEADZONE = 8000;
-const int MAX_PWM = 200;
-const int MIN_PWM = 40;   // Helps overcome motor friction
+// ================= FAILSAFE =================
+unsigned long lastReceiveTime = 0;
+#define CONNECTION_TIMEOUT 1500
 
-// ================= MOTOR CONTROL =================
-void moveMotors(int leftSpeed, int rightSpeed) {
+// ================= DISTANCE =================
+void readDistance(){
+  digitalWrite(TRIG, LOW);
+  delayMicroseconds(2);
 
-    // Apply minimum threshold to stop motor humming
-    if (abs(leftSpeed) < MIN_PWM) leftSpeed = 0;
-    if (abs(rightSpeed) < MIN_PWM) rightSpeed = 0;
+  digitalWrite(TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG, LOW);
 
-    // Direction Control (Fixes "Yellow Line" boolean warnings)
-    digitalWrite(IN1, (leftSpeed > 0) ? HIGH : LOW);
-    digitalWrite(IN2, (leftSpeed < 0) ? HIGH : LOW);
+  long duration = pulseIn(ECHO, HIGH, 20000);
 
-    digitalWrite(IN3, (rightSpeed > 0) ? HIGH : LOW);
-    digitalWrite(IN4, (rightSpeed < 0) ? HIGH : LOW);
-
-    // PWM Control (Updated for ESP32 Core 3.x)
-    ledcWrite(ENA, constrain(abs(leftSpeed), 0, MAX_PWM));
-    ledcWrite(ENB, constrain(abs(rightSpeed), 0, MAX_PWM));
+  if(duration > 0){
+    distance = duration * 0.034 / 2;
+  }
 }
 
-// ================= MOTOR TASK =================
-void motorTask(void *pvParameters) {
-    (void)pvParameters; // Removes unused parameter warning
-    VisionData data;
-    float smoothL = 0, smoothR = 0;
+// ================= MOTOR =================
+void applyMove(){
 
-    for (;;) {
-        // FAILSAFE: Stop if connection lost
-        if (millis() - lastPacketTime > TIMEOUT) {
-            moveMotors(0, 0);
-            vTaskDelay(pdMS_TO_TICKS(50));
-            continue;
-        }
+  // obstacle safety
+  if(distance < 50){
+    leftSpeed = 0;
+    rightSpeed = 0;
+  }
 
-        if (xQueueReceive(commandQueue, &data, pdMS_TO_TICKS(50))) {
-            int speed = 0;
-            int turn = 0;
+  // connection safety
+  if(millis() - lastReceiveTime > CONNECTION_TIMEOUT){
+    leftSpeed = 0;
+    rightSpeed = 0;
+  }
 
-            if (data.area > 2000) {
-                // Calculation: Turning
-                int errorX = data.centerX - FRAME_CENTER;
-                if (abs(errorX) > DEAD_BAND)
-                    turn = errorX / 2;
+  // LEFT MOTOR direction
+  if(leftSpeed > 0){
+    digitalWrite(IN1,HIGH);
+    digitalWrite(IN2,LOW);
+  } else {
+    digitalWrite(IN1,LOW);
+    digitalWrite(IN2,LOW);
+  }
 
-                // Calculation: Forward/Backward Speed
-                long areaError = (long)TARGET_AREA - data.area;
-                if (abs(areaError) > (long)AREA_DEADZONE)
-                    speed = (int)(areaError / 300);
-            }
+  // RIGHT MOTOR direction
+  if(rightSpeed > 0){
+    digitalWrite(IN3,HIGH);
+    digitalWrite(IN4,LOW);
+  } else {
+    digitalWrite(IN3,LOW);
+    digitalWrite(IN4,LOW);
+  }
 
-            int lSpeed = speed + turn;
-            int rSpeed = speed - turn;
-
-            // Apply smoothing for organic movement
-            smoothL = 0.8 * smoothL + 0.2 * lSpeed;
-            smoothR = 0.8 * smoothR + 0.2 * rSpeed;
-
-            moveMotors((int)smoothL, (int)smoothR);
-        }
-    }
+  // PWM (v3 API)
+  ledcWrite(ENA, leftSpeed);
+  ledcWrite(ENB, rightSpeed);
 }
 
-// ================= WIFI TASK =================
-void wifiTask(void *pvParameters) {
-    (void)pvParameters;
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED)
-        vTaskDelay(pdMS_TO_TICKS(500));
+// ================= WEBSOCKET =================
+void onWS(uint8_t num, WStype_t type, uint8_t * payload, size_t length){
+  if(type == WStype_TEXT){
 
-    udp.begin(udpPort);
-    VisionData incoming;
+    String data = String((char*)payload);
 
-    for (;;) {
-        int size = udp.parsePacket();
-        if (size) {
-            int len = udp.read(packetBuffer, sizeof(packetBuffer) - 1);
-            if (len > 0) {
-                packetBuffer[len] = 0;
-                if (sscanf(packetBuffer, "%d,%ld", &incoming.centerX, &incoming.area) == 2) {
-                    lastPacketTime = millis();
-                    xQueueOverwrite(commandQueue, &incoming);
-                }
-            }
-        }
-        vTaskDelay(pdMS_TO_TICKS(5));
+    int comma = data.indexOf(',');
+    if(comma > 0){
+      leftSpeed = data.substring(0, comma).toInt();
+      rightSpeed = data.substring(comma+1).toInt();
+      lastReceiveTime = millis();
     }
+  }
 }
 
 // ================= SETUP =================
-void setup() {
-    Serial.begin(115200);
+void setup(){
+  Serial.begin(115200);
 
-    pinMode(IN1, OUTPUT); pinMode(IN2, OUTPUT);
-    pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT);
-    pinMode(ENA, OUTPUT); pinMode(ENB, OUTPUT);
+  pinMode(IN1,OUTPUT);
+  pinMode(IN2,OUTPUT);
+  pinMode(IN3,OUTPUT);
+  pinMode(IN4,OUTPUT);
 
-    // New LEDC Syntax for ESP32 Core 3.x
-    ledcAttach(ENA, PWM_FREQ, PWM_RES);
-    ledcAttach(ENB, PWM_FREQ, PWM_RES);
+  pinMode(TRIG, OUTPUT);
+  pinMode(ECHO, INPUT);
 
-    commandQueue = xQueueCreate(1, sizeof(VisionData));
+  // ✅ NEW PWM API (ESP32 v3.x)
+  ledcAttach(ENA, 1000, 8);
+  ledcAttach(ENB, 1000, 8);
 
-    xTaskCreatePinnedToCore(wifiTask, "WiFi", 4096, NULL, 1, NULL, 0);
-    xTaskCreatePinnedToCore(motorTask, "Motor", 4096, NULL, 2, NULL, 1);
+  WiFi.begin(ssid, password);
+
+  Serial.print("Connecting");
+  while(WiFi.status() != WL_CONNECTED){
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nConnected!");
+  Serial.print("ESP IP: ");
+  Serial.println(WiFi.localIP());
+
+  webSocket.begin();
+  webSocket.onEvent(onWS);
 }
 
-void loop() { 
-    vTaskDelete(NULL); 
+// ================= LOOP =================
+void loop(){
+  webSocket.loop();
+  readDistance();
+  applyMove();
 }
