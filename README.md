@@ -1,22 +1,26 @@
-Team Contributions:
+Contributions of each member-
 
 Aniket Kumar-
-1. Selected and finalized the components required for the project.
-2. Assisted in the assembly and development of the follower bot and integration of different modules into unifed system.
-3. Developed the ESP32 control code and the computer vision module using OpenCV and MediaPipe.
-4. Established Wi-Fi communication between the bot, laptop, and mobile phone.
-5. Performed debugging, testing, and code refinements to improve system performance and reliability.
-   
+
+1. Selected and finalized the electronic and mechanical components required for the follower bot.
+2. Developed the ESP32 control software and the computer vision module using OpenCV and MediaPipe.
+3. Integrated the embedded, computer vision, and communication modules into a unified person-following system.
+4. Designed and implemented the Wi-Fi communication workflow between the bot, laptop, and mobile phone.
+5. Conducted debugging, testing, and code optimization to improve system stability, responsiveness, and overall performance.
+6. Prepared project documentation and maintained the project repository.
+
 Pratham Jain-
-1. Designed the circuit architecture for the follower bot.
-2. Built and assembled the bot chassis and overall mechanical structure.
-3. Modified the motor gearbox and shaft assembly to meet the project's design requirements.
-4. Assisted with wiring, hardware connections, and implementation of control logic.
-5. Contributed to the integration and testing of the hardware system.
+
+1. Designed the circuit architecture, electrical layout, and power distribution system for the follower bot.
+2. Built and assembled the robot chassis and overall mechanical structure.
+3. Modified the motor gearbox and shaft assembly to meet the project's design and performance requirements.
+4. Assisted in wiring, hardware integration, and implementation of the control logic.
+5. Participated in hardware testing, troubleshooting, and system-level validation to ensure reliable operation.
 
 Vipul Krishna-
-1. Contributed to the development of the core person-detection and following logic.
-2. Assisted in designing and implementing the image-processing workflow.
-3. Developed the integration logic for using a mobile phone as the image-processing device.
-4. Supported code development, testing, and system integration activities.
-5. Helped refine the overall software workflow for reliable person-following behavior.
+
+1. Developed the core person-detection and person-following logic for the follower bot.
+2. Designed a robust target-locking and re-identification mechanism using a state-based architecture (IDLE, LOCKED, and SEARCH) to maintain tracking in dynamic environments.
+3. Contributed to the target identification methodology using body-proportion features derived from MediaPipe landmarks.
+4. Assisted in refining and optimizing the tracking algorithm to improve accuracy and reliability.
+5. Participated in testing and validation of the person-following behavior under different operating conditions.
