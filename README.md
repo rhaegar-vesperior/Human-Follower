@@ -16,6 +16,7 @@ Pratham Jain-
 3. Modified the motor gearbox and shaft assembly to meet the project's design and performance requirements.
 4. Assisted in wiring, hardware integration, and implementation of the control logic.
 5. Participated in hardware testing, troubleshooting, and system-level validation to ensure reliable operation.
+6. Created Cad files of the bot.
 
 Vipul Krishna-
 
